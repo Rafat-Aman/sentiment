@@ -47,7 +47,9 @@ if python -c "import torch" 2>/dev/null; then
         numpy \
         scikit-learn \
         tqdm \
-        kagglehub
+        kagglehub \
+        sentencepiece \
+        tiktoken
 else
     echo "  Installing PyTorch and other dependencies..."
     pip install \
@@ -60,7 +62,9 @@ else
         numpy \
         scikit-learn \
         tqdm \
-        kagglehub
+        kagglehub \
+        sentencepiece \
+        tiktoken
 fi
 
 echo "  ✅ Python dependencies installed"
@@ -136,15 +140,13 @@ mkdir -p "${OUTPUT_DIR}"
 # If code isn't already in place, note for user
 if [ ! -f "${CODE_DIR}/config.py" ]; then
     echo "  ⚠️  Pipeline code not found at ${CODE_DIR}"
-    echo "  Upload your cached_pipeline/ directory to ${CODE_DIR}"
+    echo "  Clone the repo or upload files to ${CODE_DIR}"
     echo "  Files needed:"
     echo "    - config.py"
     echo "    - parse_iemocap.py"
-    echo "    - build_frozen_cache.py"
-    echo "    - dataset_cached.py"
     echo "    - qfl.py"
-    echo "    - model_cached.py"
-    echo "    - train_single_gpu.py"
+    echo "    - model_full.py"
+    echo "    - train_full.py"
 else
     echo "  ✅ Pipeline code found"
 fi
@@ -207,22 +209,14 @@ echo "Next steps:"
 echo ""
 echo "  1. Clone repository to ${CODE_DIR}/ (if not done)"
 echo ""
-echo "  2. Build frozen cache (run once, ~30 min):"
+echo "  2. Train (runs 5-fold CV, full fine-tuning):"
 echo "     cd ${CODE_DIR}"
-echo "     python build_frozen_cache.py \\"
+echo "     python train_full.py \\"
 echo "       --iemocap_path ${DATA_DIR}/IEMOCAP_full_release \\"
 echo "       --save_dir ${OUTPUT_DIR}"
 echo ""
-echo "  3. Train (runs 5-fold CV):"
-echo "     cd ${CODE_DIR}"
-echo "     python train_single_gpu.py \\"
-echo "       --cache_path ${OUTPUT_DIR}/frozen_features.pt \\"
-echo "       --iemocap_path ${DATA_DIR}/IEMOCAP_full_release \\"
-echo "       --save_dir ${OUTPUT_DIR}"
-echo ""
-echo "  Estimated training time:"
-echo "    T4:   ~1.5 hours"
-echo "    4090: ~1 hour"
-echo "    A100: ~1 hour"
-echo "    H100: ~35 min"
+echo "  Estimated training time (48GB GPU):"
+echo "    RTX 4090: ~3-4 hours"
+echo "    A100:     ~2-3 hours"
+echo "    H100:     ~1.5 hours"
 echo ""
