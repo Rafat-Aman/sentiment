@@ -2,16 +2,15 @@
 # ============================================================
 # run_all.sh — Master orchestrator for vast.ai pipeline
 # ============================================================
-# Clones repo → setup → frozen cache → training in sequence.
+# Clones repo → setup → full fine-tuning (no caching).
 # Saves timestamped logs for every stage. Stops on failure.
 #
 # Usage (on a fresh vast.ai instance):
 #   wget -O run_all.sh https://raw.githubusercontent.com/Rafat-Aman/sentiment/main/run_all.sh
 #   chmod +x run_all.sh && ./run_all.sh
 #
-# Or skip stages if already done:
+# Or skip setup if already done:
 #   ./run_all.sh --skip-setup
-#   ./run_all.sh --skip-setup --skip-cache
 # ============================================================
 set -euo pipefail
 
@@ -33,16 +32,13 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 # PARSE FLAGS
 # ─────────────────────────────────────────────────────────────
 SKIP_SETUP=false
-SKIP_CACHE=false
 
 for arg in "$@"; do
     case $arg in
         --skip-setup)  SKIP_SETUP=true ;;
-        --skip-cache)  SKIP_CACHE=true ;;
         --help|-h)
-            echo "Usage: ./run_all.sh [--skip-setup] [--skip-cache]"
+            echo "Usage: ./run_all.sh [--skip-setup]"
             echo "  --skip-setup  Skip environment setup (deps already installed)"
-            echo "  --skip-cache  Skip frozen cache build (cache already exists)"
             exit 0
             ;;
         *)  echo "Unknown flag: $arg"; exit 1 ;;
@@ -57,8 +53,7 @@ mkdir -p "${OUTPUT_DIR}"
 
 CLONE_LOG="${LOG_DIR}/00_clone_${TIMESTAMP}.log"
 SETUP_LOG="${LOG_DIR}/01_setup_${TIMESTAMP}.log"
-CACHE_LOG="${LOG_DIR}/02_cache_${TIMESTAMP}.log"
-TRAIN_LOG="${LOG_DIR}/03_train_${TIMESTAMP}.log"
+TRAIN_LOG="${LOG_DIR}/02_train_${TIMESTAMP}.log"
 MASTER_LOG="${LOG_DIR}/00_master_${TIMESTAMP}.log"
 
 log() {
@@ -98,12 +93,12 @@ run_stage() {
 # ─────────────────────────────────────────────────────────────
 echo "" | tee -a "${MASTER_LOG}"
 echo "╔══════════════════════════════════════════════════╗" | tee -a "${MASTER_LOG}"
-echo "║  Quantum Enhanced Fusion — Full Pipeline        ║" | tee -a "${MASTER_LOG}"
+echo "║  Quantum Enhanced Fusion — Full Fine-Tuning     ║" | tee -a "${MASTER_LOG}"
 echo "║  $(date '+%Y-%m-%d %H:%M:%S')                          ║" | tee -a "${MASTER_LOG}"
 echo "╠══════════════════════════════════════════════════╣" | tee -a "${MASTER_LOG}"
+echo "║  Mode:       Full fine-tuning (no caching)      ║" | tee -a "${MASTER_LOG}"
 echo "║  Repo:       ${REPO_URL}  ║" | tee -a "${MASTER_LOG}"
 echo "║  Skip setup: ${SKIP_SETUP}                            ║" | tee -a "${MASTER_LOG}"
-echo "║  Skip cache: ${SKIP_CACHE}                            ║" | tee -a "${MASTER_LOG}"
 echo "║  Logs:       ${LOG_DIR}/            ║" | tee -a "${MASTER_LOG}"
 echo "╚══════════════════════════════════════════════════╝" | tee -a "${MASTER_LOG}"
 echo "" | tee -a "${MASTER_LOG}"
@@ -140,31 +135,10 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────
-# STAGE 2: BUILD FROZEN CACHE
+# STAGE 2: FULL FINE-TUNING (5-fold CV)
 # ─────────────────────────────────────────────────────────────
-if [ "${SKIP_CACHE}" = true ]; then
-    log "⏭️  Skipping cache build (--skip-cache)"
-elif [ -f "${OUTPUT_DIR}/frozen_features.pt" ]; then
-    log "⏭️  Frozen cache already exists at ${OUTPUT_DIR}/frozen_features.pt"
-    log "   Delete it to rebuild, or use --skip-cache"
-else
-    run_stage "Frozen Cache Build" "${CACHE_LOG}" \
-        python "${CODE_DIR}/build_frozen_cache.py" \
-            --iemocap_path "${IEMOCAP_PATH}" \
-            --save_dir "${OUTPUT_DIR}"
-fi
-
-if [ ! -f "${OUTPUT_DIR}/frozen_features.pt" ]; then
-    log "❌ FATAL: frozen_features.pt not found in ${OUTPUT_DIR}"
-    exit 1
-fi
-
-# ─────────────────────────────────────────────────────────────
-# STAGE 3: TRAINING (5-fold CV)
-# ─────────────────────────────────────────────────────────────
-run_stage "Training (5-fold CV)" "${TRAIN_LOG}" \
-    python "${CODE_DIR}/train_single_gpu.py" \
-        --cache_path "${OUTPUT_DIR}/frozen_features.pt" \
+run_stage "Training — Full Fine-Tuning (5-fold CV)" "${TRAIN_LOG}" \
+    python "${CODE_DIR}/train_full.py" \
         --iemocap_path "${IEMOCAP_PATH}" \
         --save_dir "${OUTPUT_DIR}"
 
@@ -182,8 +156,7 @@ echo "║  ✅ PIPELINE COMPLETE                           ║" | tee -a "${MAST
 echo "║  Total time: ${TOTAL_MINS}m ${TOTAL_SECS}s                          ║" | tee -a "${MASTER_LOG}"
 echo "╠══════════════════════════════════════════════════╣" | tee -a "${MASTER_LOG}"
 echo "║  Outputs:                                       ║" | tee -a "${MASTER_LOG}"
-echo "║    ${OUTPUT_DIR}/frozen_features.pt   ║" | tee -a "${MASTER_LOG}"
-echo "║    ${OUTPUT_DIR}/cached_qfl_fold*.pth ║" | tee -a "${MASTER_LOG}"
+echo "║    ${OUTPUT_DIR}/full_qfl_fold*.pth  ║" | tee -a "${MASTER_LOG}"
 echo "║  Logs:                                          ║" | tee -a "${MASTER_LOG}"
 echo "║    ${MASTER_LOG}  ║" | tee -a "${MASTER_LOG}"
 echo "╚══════════════════════════════════════════════════╝" | tee -a "${MASTER_LOG}"
