@@ -34,19 +34,34 @@ echo "  ✅ System packages installed"
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "[2/6] Installing Python dependencies..."
-pip install --quiet --upgrade pip
+pip install --upgrade pip
 
-pip install --quiet \
-    torch torchvision torchaudio \
-    transformers \
-    peft \
-    librosa \
-    soundfile \
-    pandas \
-    numpy \
-    scikit-learn \
-    tqdm \
-    kagglehub
+if python -c "import torch" 2>/dev/null; then
+    echo "  ✅ Pre-installed PyTorch detected. Skipping torch/torchvision/torchaudio install."
+    pip install \
+        transformers \
+        peft \
+        librosa \
+        soundfile \
+        pandas \
+        numpy \
+        scikit-learn \
+        tqdm \
+        kagglehub
+else
+    echo "  Installing PyTorch and other dependencies..."
+    pip install \
+        torch torchvision torchaudio \
+        transformers \
+        peft \
+        librosa \
+        soundfile \
+        pandas \
+        numpy \
+        scikit-learn \
+        tqdm \
+        kagglehub
+fi
 
 echo "  ✅ Python dependencies installed"
 
@@ -190,7 +205,7 @@ echo "============================================"
 echo ""
 echo "Next steps:"
 echo ""
-echo "  1. Upload cached_pipeline/ to ${CODE_DIR}/ (if not done)"
+echo "  1. Clone repository to ${CODE_DIR}/ (if not done)"
 echo ""
 echo "  2. Build frozen cache (run once, ~30 min):"
 echo "     cd ${CODE_DIR}"
