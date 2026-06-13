@@ -159,7 +159,7 @@ class QuantumEnhancedCachedModel(nn.Module):
                                        position_bias=position_bias)[:2]
         if self.ae_layer_norm is not None:
             x_w = self.ae_layer_norm(x_w)
-        ha_w = self._attn_pool(x_w, self.pool_w)
+        ha_w = self._attn_pool(x_w, self.pool_w).float()
 
         # ── Run unfrozen HuBERT layers ───────────────────────
         x_h = hubert_f.to(dev)
@@ -167,13 +167,13 @@ class QuantumEnhancedCachedModel(nn.Module):
             x_h = layer(x_h, attention_mask=None)[0]
         if self.he_layer_norm is not None:
             x_h = self.he_layer_norm(x_h)
-        ha_h = self._attn_pool(x_h, self.pool_h)
+        ha_h = self._attn_pool(x_h, self.pool_h).float()
 
         # ── Text encoder ─────────────────────────────────────
         ht = self.te(
             input_ids.to(dev),
             attention_mask=attention_mask.to(dev),
-        ).last_hidden_state[:, 0, :]
+        ).last_hidden_state[:, 0, :].float()
 
         # ── Cross-attention fusion ───────────────────────────
         ha_avg  = (ha_w + ha_h) / 2
