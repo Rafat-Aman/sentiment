@@ -16,28 +16,12 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────
-# PATHS & REPO
+# PATHS
 # ─────────────────────────────────────────────────────────────
 REPO_URL="https://github.com/Rafat-Aman/sentiment.git"
 WORK_DIR="/workspace"
-
-# Dynamically locate code directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-if [ -f "${SCRIPT_DIR}/config.py" ]; then
-    # Running inside the repository/code directory directly!
-    CODE_DIR="${SCRIPT_DIR}"
-    REPO_DIR="${SCRIPT_DIR}"
-else
-    # Running outside, clone to WORK_DIR/sentiment
-    REPO_DIR="${WORK_DIR}/sentiment"
-    if [ -d "${REPO_DIR}/cached_pipeline" ]; then
-        CODE_DIR="${REPO_DIR}/cached_pipeline"
-    else
-        CODE_DIR="${REPO_DIR}"
-    fi
-fi
-
+REPO_DIR="${WORK_DIR}/sentiment"
+CODE_DIR="${REPO_DIR}"
 DATA_DIR="${WORK_DIR}/data"
 OUTPUT_DIR="${WORK_DIR}/output"
 LOG_DIR="${WORK_DIR}/logs"
@@ -77,12 +61,10 @@ CACHE_LOG="${LOG_DIR}/02_cache_${TIMESTAMP}.log"
 TRAIN_LOG="${LOG_DIR}/03_train_${TIMESTAMP}.log"
 MASTER_LOG="${LOG_DIR}/00_master_${TIMESTAMP}.log"
 
-# Log to both file and stdout
 log() {
     echo "[$(date '+%H:%M:%S')] $1" | tee -a "${MASTER_LOG}"
 }
 
-# Run a command, stream to stdout AND log file, abort on failure
 run_stage() {
     local stage_name="$1"
     local log_file="$2"
@@ -94,7 +76,6 @@ run_stage() {
 
     local start_time=$(date +%s)
 
-    # Run with tee so output goes to both terminal and log
     if "$@" 2>&1 | tee -a "${log_file}"; then
         local end_time=$(date +%s)
         local elapsed=$(( end_time - start_time ))
@@ -130,26 +111,20 @@ echo "" | tee -a "${MASTER_LOG}"
 PIPELINE_START=$(date +%s)
 
 # ─────────────────────────────────────────────────────────────
-# STAGE 0: CLONE REPO (if not running from within code dir)
+# STAGE 0: CLONE REPO
 # ─────────────────────────────────────────────────────────────
-if [ -f "${SCRIPT_DIR}/config.py" ]; then
-    log "⏭️  Running directly from code directory. Skipping clone/pull."
+if [ -f "${CODE_DIR}/config.py" ]; then
+    log "⏭️  Repo already cloned, pulling latest..."
+    git -C "${REPO_DIR}" pull 2>&1 | tee -a "${CLONE_LOG}" || true
 else
-    if [ -d "${REPO_DIR}" ] && ([ -f "${CODE_DIR}/config.py" ] || [ -f "${REPO_DIR}/config.py" ]); then
-        log "⏭️  Repo already cloned at ${REPO_DIR}, pulling latest..."
-        git -C "${REPO_DIR}" pull 2>&1 | tee -a "${CLONE_LOG}" || true
-    else
-        log "━━━ STAGE: Git Clone ━━━"
-        log "  Cloning ${REPO_URL} → ${REPO_DIR}"
-        git clone "${REPO_URL}" "${REPO_DIR}" 2>&1 | tee -a "${CLONE_LOG}"
-        log "✅ Repo cloned"
-    fi
+    log "━━━ STAGE: Git Clone ━━━"
+    log "  Cloning ${REPO_URL} → ${REPO_DIR}"
+    git clone "${REPO_URL}" "${REPO_DIR}" 2>&1 | tee -a "${CLONE_LOG}"
+    log "✅ Repo cloned"
 fi
 
-# Verify pipeline code exists
 if [ ! -f "${CODE_DIR}/config.py" ]; then
-    log "❌ FATAL: config.py not found"
-    log "   Expected in: ${CODE_DIR}"
+    log "❌ FATAL: config.py not found in ${CODE_DIR}"
     exit 1
 fi
 log "  Code dir: ${CODE_DIR}"
@@ -179,10 +154,8 @@ else
             --save_dir "${OUTPUT_DIR}"
 fi
 
-# Verify cache exists before training
 if [ ! -f "${OUTPUT_DIR}/frozen_features.pt" ]; then
     log "❌ FATAL: frozen_features.pt not found in ${OUTPUT_DIR}"
-    log "   Run without --skip-cache, or check cache build logs."
     exit 1
 fi
 
@@ -215,7 +188,6 @@ echo "║  Logs:                                          ║" | tee -a "${MASTE
 echo "║    ${MASTER_LOG}  ║" | tee -a "${MASTER_LOG}"
 echo "╚══════════════════════════════════════════════════╝" | tee -a "${MASTER_LOG}"
 
-# List all output files
 echo "" | tee -a "${MASTER_LOG}"
 log "Output files:"
 ls -lh "${OUTPUT_DIR}"/ 2>/dev/null | tee -a "${MASTER_LOG}"
