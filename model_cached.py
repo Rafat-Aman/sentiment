@@ -47,6 +47,13 @@ class QuantumEnhancedCachedModel(nn.Module):
         self.ae_layer_norm = None
         if hasattr(_ae_full, 'layer_norm') and _ae_full.layer_norm is not None:
             self.ae_layer_norm = _ae_full.layer_norm.to(device)
+        # WavLM: only layer 0 has rel_attn_embed for position bias.
+        # We need it to pre-compute bias before running unfrozen layers.
+        layer0_attn = _ae_full.encoder.layers[0].attention
+        self.ae_rel_attn_embed = layer0_attn.rel_attn_embed.to(device)
+        self.ae_num_buckets = layer0_attn.num_buckets
+        self.ae_max_distance = layer0_attn.max_distance
+        self.ae_num_heads = _ae_full.config.num_attention_heads
         del _ae_full
 
         # ── HuBERT: only keep unfrozen layers (last N_UNFROZEN) ─
@@ -115,13 +122,41 @@ class QuantumEnhancedCachedModel(nn.Module):
         weights = F.softmax(scores, dim=-1).unsqueeze(-1)
         return (hidden_states * weights).sum(dim=1)
 
+    def _compute_wavlm_position_bias(self, seq_len, bsz):
+        """Pre-compute WavLM relative position bias using layer-0's embedding."""
+        import math
+        context = torch.arange(seq_len, dtype=torch.long)[:, None]
+        memory  = torch.arange(seq_len, dtype=torch.long)[None, :]
+        relative = memory - context
+
+        num_buckets = self.ae_num_buckets
+        half = num_buckets // 2
+        buckets = (relative > 0).long() * half
+        rel_abs = relative.abs()
+        max_exact = half // 2
+        is_small = rel_abs < max_exact
+
+        large = torch.log(rel_abs.float() / max_exact)
+        large = large / math.log(self.ae_max_distance / max_exact)
+        large = (max_exact + large * (half - max_exact)).long()
+        large = torch.min(large, torch.full_like(large, half - 1))
+        buckets += torch.where(is_small, rel_abs, large)
+
+        buckets = buckets.to(self.ae_rel_attn_embed.weight.device)
+        values = self.ae_rel_attn_embed(buckets).permute(2, 0, 1)  # [H, T, T]
+        return values.unsqueeze(0).expand(bsz, -1, -1, -1) \
+                     .reshape(bsz * self.ae_num_heads, seq_len, seq_len)
+
     def forward(self, wavlm_f, hubert_f, input_ids, attention_mask):
         dev = self.device
 
         # ── Run unfrozen WavLM layers ────────────────────────
         x_w = wavlm_f.to(dev)
+        # Pre-compute position bias (only layer 0 has rel_attn_embed)
+        position_bias = self._compute_wavlm_position_bias(x_w.size(1), x_w.size(0))
         for layer in self.ae_unfrozen:
-            x_w = layer(x_w, attention_mask=None)[0]
+            x_w, position_bias = layer(x_w, attention_mask=None,
+                                       position_bias=position_bias)[:2]
         if self.ae_layer_norm is not None:
             x_w = self.ae_layer_norm(x_w)
         ha_w = self._attn_pool(x_w, self.pool_w)
