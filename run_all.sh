@@ -2,25 +2,42 @@
 # ============================================================
 # run_all.sh — Master orchestrator for vast.ai pipeline
 # ============================================================
-# Runs setup → frozen cache → training in sequence.
+# Clones repo → setup → frozen cache → training in sequence.
 # Saves timestamped logs for every stage. Stops on failure.
 #
-# Usage:
+# Usage (on a fresh vast.ai instance):
+#   wget -O run_all.sh https://raw.githubusercontent.com/Rafat-Aman/sentiment/main/run_all.sh
 #   chmod +x run_all.sh && ./run_all.sh
 #
-# Or skip setup if already done:
+# Or skip stages if already done:
 #   ./run_all.sh --skip-setup
-#
-# Or resume from training only (cache already built):
 #   ./run_all.sh --skip-setup --skip-cache
 # ============================================================
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────
-# PATHS
+# PATHS & REPO
 # ─────────────────────────────────────────────────────────────
+REPO_URL="https://github.com/Rafat-Aman/sentiment.git"
 WORK_DIR="/workspace"
-CODE_DIR="${WORK_DIR}/cached_pipeline"
+
+# Dynamically locate code directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+if [ -f "${SCRIPT_DIR}/config.py" ]; then
+    # Running inside the repository/code directory directly!
+    CODE_DIR="${SCRIPT_DIR}"
+    REPO_DIR="${SCRIPT_DIR}"
+else
+    # Running outside, clone to WORK_DIR/sentiment
+    REPO_DIR="${WORK_DIR}/sentiment"
+    if [ -d "${REPO_DIR}/cached_pipeline" ]; then
+        CODE_DIR="${REPO_DIR}/cached_pipeline"
+    else
+        CODE_DIR="${REPO_DIR}"
+    fi
+fi
+
 DATA_DIR="${WORK_DIR}/data"
 OUTPUT_DIR="${WORK_DIR}/output"
 LOG_DIR="${WORK_DIR}/logs"
@@ -54,6 +71,7 @@ done
 mkdir -p "${LOG_DIR}"
 mkdir -p "${OUTPUT_DIR}"
 
+CLONE_LOG="${LOG_DIR}/00_clone_${TIMESTAMP}.log"
 SETUP_LOG="${LOG_DIR}/01_setup_${TIMESTAMP}.log"
 CACHE_LOG="${LOG_DIR}/02_cache_${TIMESTAMP}.log"
 TRAIN_LOG="${LOG_DIR}/03_train_${TIMESTAMP}.log"
@@ -102,6 +120,7 @@ echo "╔═══════════════════════�
 echo "║  Quantum Enhanced Fusion — Full Pipeline        ║" | tee -a "${MASTER_LOG}"
 echo "║  $(date '+%Y-%m-%d %H:%M:%S')                          ║" | tee -a "${MASTER_LOG}"
 echo "╠══════════════════════════════════════════════════╣" | tee -a "${MASTER_LOG}"
+echo "║  Repo:       ${REPO_URL}  ║" | tee -a "${MASTER_LOG}"
 echo "║  Skip setup: ${SKIP_SETUP}                            ║" | tee -a "${MASTER_LOG}"
 echo "║  Skip cache: ${SKIP_CACHE}                            ║" | tee -a "${MASTER_LOG}"
 echo "║  Logs:       ${LOG_DIR}/            ║" | tee -a "${MASTER_LOG}"
@@ -109,6 +128,31 @@ echo "╚═══════════════════════�
 echo "" | tee -a "${MASTER_LOG}"
 
 PIPELINE_START=$(date +%s)
+
+# ─────────────────────────────────────────────────────────────
+# STAGE 0: CLONE REPO (if not running from within code dir)
+# ─────────────────────────────────────────────────────────────
+if [ -f "${SCRIPT_DIR}/config.py" ]; then
+    log "⏭️  Running directly from code directory. Skipping clone/pull."
+else
+    if [ -d "${REPO_DIR}" ] && ([ -f "${CODE_DIR}/config.py" ] || [ -f "${REPO_DIR}/config.py" ]); then
+        log "⏭️  Repo already cloned at ${REPO_DIR}, pulling latest..."
+        git -C "${REPO_DIR}" pull 2>&1 | tee -a "${CLONE_LOG}" || true
+    else
+        log "━━━ STAGE: Git Clone ━━━"
+        log "  Cloning ${REPO_URL} → ${REPO_DIR}"
+        git clone "${REPO_URL}" "${REPO_DIR}" 2>&1 | tee -a "${CLONE_LOG}"
+        log "✅ Repo cloned"
+    fi
+fi
+
+# Verify pipeline code exists
+if [ ! -f "${CODE_DIR}/config.py" ]; then
+    log "❌ FATAL: config.py not found"
+    log "   Expected in: ${CODE_DIR}"
+    exit 1
+fi
+log "  Code dir: ${CODE_DIR}"
 
 # ─────────────────────────────────────────────────────────────
 # STAGE 1: ENVIRONMENT SETUP

@@ -12,7 +12,7 @@ set -e
 
 WORK_DIR="/workspace"
 DATA_DIR="${WORK_DIR}/data"
-CODE_DIR="${WORK_DIR}/cached_pipeline"
+CODE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 OUTPUT_DIR="${WORK_DIR}/output"
 
 echo "============================================"
