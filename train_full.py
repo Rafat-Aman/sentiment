@@ -209,6 +209,7 @@ def main():
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
 
         best_f1 = 0.0
+        patience_counter = 0
         ckpt_path = os.path.join(args.save_dir, f'full_qfl_fold{fold+1}.pth')
 
         for ep in range(EPOCHS):
@@ -223,8 +224,15 @@ def main():
 
             if ep_mf1 > best_f1:
                 best_f1 = ep_mf1
+                patience_counter = 0
                 torch.save(model.state_dict(), ckpt_path)
                 print(f'  * New best MacroF1={best_f1:.4f} -> saved')
+            else:
+                patience_counter += 1
+                print(f'  (no improvement, patience {patience_counter}/{EARLY_STOP_PATIENCE})')
+                if patience_counter >= EARLY_STOP_PATIENCE:
+                    print(f'  ⏹️  Early stopping at epoch {ep+1}')
+                    break
 
         # Final eval with best checkpoint
         best_model = QuantumEnhancedFullModel(NUM_CLASSES, device)

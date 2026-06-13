@@ -32,6 +32,7 @@ CLIP_GRAD    = 1.0
 N_FOLDS      = 5
 LABEL_SMOOTH = 0.0   # Matched to original (no smoothing)
 USE_AMP      = False  # QFL produces NaN under FP16
+EARLY_STOP_PATIENCE = 4  # Stop fold if no MacroF1 improvement for N epochs
 
 # Audio
 MAX_TEXT_LEN  = 64
