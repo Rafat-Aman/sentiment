@@ -25,12 +25,12 @@ LORA_DROPOUT = 0.1
 BATCH_SIZE   = 16    # ↑ from 4/8 — 4090 has headroom, A100/H100 easily
 ACCUM_STEPS  = 2     # effective batch = 32 (was 16)
 EPOCHS       = 15    # ↑ from 10 — more time to converge with richer model
-LR           = 1e-5
+LR           = 2e-5  # ↑ from 1e-5 — standard fine-tuning rate
 WEIGHT_DECAY = 0.01
 CLIP_GRAD    = 1.0
 N_FOLDS      = 5
 LABEL_SMOOTH = 0.1
-USE_AMP      = True
+USE_AMP      = False  # Disabled: QFL produces NaN under FP16, GradScaler skips all steps
 
 # Audio
 MAX_TEXT_LEN  = 64
